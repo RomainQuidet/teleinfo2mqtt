@@ -167,6 +167,7 @@ def linky():
                 line = ser.readline()
 
             frame_window = deque([],100)
+            tic_frame_counter = 0
             while True:                
                 frame = _readframe(ser)
                 if ("EAST" in frame):
@@ -175,8 +176,11 @@ def linky():
                     consumption =get_consumption(frame_window)
                     if (consumption is not None):
                         frame["C_CONSO_INST"] =consumption
-                if mqtt_send_data:
-                    _send_to_mqtt(frame)                
+                if mqtt_tic_frame_sync > 0:
+                    tic_frame_counter += 1
+                    if tic_frame_counter ==  mqtt_tic_frame_sync:
+                        tic_frame_counter = 0
+                        _send_to_mqtt(frame)               
                 
 
     except termios.error as exc:
@@ -316,7 +320,7 @@ if __name__ == '__main__':
         linky_register_mapping = cfg['linky']['register_mapping']
         ha_reset_discovery = cfg['ha']['reset_discovery']
         ha_key_mapping = cfg['ha']['historic_key_mapping'] if linky_legacy_mode else cfg['ha']['standard_key_mapping']
-        mqtt_send_data = cfg['mqtt'].get('send_data',True)
+        mqtt_tic_frame_sync = int(cfg['mqtt'].get('tic_frame_sync',10))
         mqtt_server = os.environ.get("MQTT_IP", cfg['mqtt']['server_ip']) 
         mqtt_port = int(os.environ.get("MQTT_PORT", cfg['mqtt']['port']))      
         mqtt_keepalive = int(cfg['mqtt']['keepalive']) 
@@ -334,8 +338,7 @@ if __name__ == '__main__':
 
     logging.getLogger().setLevel(get_log_level(log_level))
 
-    write_client = None
-    if mqtt_send_data:
+    if mqtt_tic_frame_sync > 0:
         # Connexion à MQTT
         logging.info('Initiating MQTT connection')
         mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,'Linky')
@@ -348,13 +351,14 @@ if __name__ == '__main__':
         mqttc.will_set("linky/status",payload="offline", qos=0, retain=True)
 
         # Connect to the MQTT server
+        logging.debug(f"connect to {mqtt_server}:{mqtt_port}")
         while True:
             try:
                 mqttc.connect(mqtt_server, mqtt_port, mqtt_keepalive)
                 mqttc.loop_start()
                 break
-            except:
-                logging.warning('Can\'t connect to MQTT broker. Retrying in 10 seconds.')
+            except Exception as exc:
+                logging.warning(f"Can\'t connect to MQTT broker {exc}. Retrying in 10 seconds.")
                 time.sleep(10)
                 pass        
     # Lance la boucle infinie de lecture de la téléinfo
