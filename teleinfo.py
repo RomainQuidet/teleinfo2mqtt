@@ -202,10 +202,10 @@ def recon():
     try:
         mqttc.reconnect()
         logging.info('Successfull reconnected to the MQTT server')
+        return True
     except:
-        logging.warning('Could not reconnect to the MQTT server. Trying again in 10 seconds')
-        time.sleep(10)
-        recon()
+        return False
+        
 
 def publish_message(msg, mqtt_path):
     try:
@@ -271,7 +271,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
 def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
     if reason_code != 0:
         logging.warning('Unexpected disconnection from MQTT, trying to reconnect')
-        recon()
+        while recon() == False:
+            logging.warning('Could not reconnect to the MQTT server. Trying again in 30 seconds')
+            time.sleep(30)
 
 
 def get_log_level(levelStr):
